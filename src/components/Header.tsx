@@ -1,24 +1,34 @@
 import React from 'react';
-import { PlusCircle, Sparkles, Database, ShieldAlert, Activity, CheckCircle2, AlertTriangle, Clock } from 'lucide-react';
+import { PlusCircle, Sparkles, Database, ShieldAlert, Activity, CheckCircle2, AlertTriangle, Clock, Share2, CloudUpload, Cloud } from 'lucide-react';
 
 interface HeaderProps {
   onOpenAddModal: () => void;
   onOpenAiModal: () => void;
   onOpenDataModal: () => void;
+  onOpenSaveShareModal: () => void;
   totalCount?: number;
   openCount?: number;
   onProgressCount?: number;
   closeCount?: number;
+  activeRoomId?: string;
+  onSaveToCloud?: () => void;
+  isSavingCloud?: boolean;
+  lastCloudSync?: string | null;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   onOpenAddModal,
   onOpenAiModal,
   onOpenDataModal,
+  onOpenSaveShareModal,
   totalCount = 0,
   openCount = 0,
   onProgressCount = 0,
   closeCount = 0,
+  activeRoomId = 'TIM-OPERASIONAL',
+  onSaveToCloud,
+  isSavingCloud = false,
+  lastCloudSync = null,
 }) => {
   return (
     <header className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white p-6 sm:p-8 rounded-3xl shadow-xl border border-slate-800/80">
@@ -38,9 +48,10 @@ export const Header: React.FC<HeaderProps> = ({
               <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
                 Problem & CAPA Tracker Harian
               </h1>
-              <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                Real-time Sync
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase px-3 py-1 rounded-full bg-blue-500/20 text-blue-300 border border-blue-400/30 shadow-xs" title="Link Share Live Sync Aktif">
+                <Cloud className="w-3.5 h-3.5 text-blue-400 animate-pulse" />
+                <span>Ruang: <strong className="text-white">{activeRoomId || 'TIM-OPERASIONAL'}</strong></span>
+                {lastCloudSync && <span className="text-blue-200 text-[10px] font-normal">({lastCloudSync})</span>}
               </span>
             </div>
             <p className="text-slate-300 text-xs sm:text-sm max-w-2xl leading-relaxed">
@@ -90,6 +101,27 @@ export const Header: React.FC<HeaderProps> = ({
             <Database className="w-4 h-4 text-indigo-400" />
             <span>Data</span>
           </button>
+
+          <button
+            onClick={onOpenSaveShareModal}
+            className="inline-flex items-center gap-2 px-4 py-3 text-sm font-extrabold rounded-xl bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 shadow-lg shadow-amber-500/20 border border-amber-300/40 transition-all active:scale-95 cursor-pointer"
+            title="Simpan & Bagikan Tautan beserta Data"
+          >
+            <Share2 className="w-4 h-4 text-slate-950" />
+            <span>Simpan & Share</span>
+          </button>
+
+          {onSaveToCloud && (
+            <button
+              onClick={onSaveToCloud}
+              disabled={isSavingCloud}
+              className="inline-flex items-center gap-2 px-4 py-3 text-sm font-extrabold rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-lg shadow-blue-500/20 border border-blue-400/30 transition-all active:scale-95 cursor-pointer disabled:opacity-50"
+              title="Simpan langsung ke server agar siapapun yang membuka link melihat update terbaru!"
+            >
+              <CloudUpload className={`w-4 h-4 text-amber-300 ${isSavingCloud ? 'animate-spin' : 'animate-bounce'}`} />
+              <span>{isSavingCloud ? 'Menyimpan...' : 'Simpan Update Link'}</span>
+            </button>
+          )}
 
           <button
             onClick={onOpenAddModal}

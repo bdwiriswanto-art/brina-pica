@@ -23,6 +23,8 @@ import { AiAssistantModal } from './components/AiAssistantModal';
 import { DetailHistoryModal } from './components/DetailHistoryModal';
 import { DataManagementModal } from './components/DataManagementModal';
 import { DeleteConfirmModal } from './components/DeleteConfirmModal';
+import { SaveShareModal } from './components/SaveShareModal';
+import { Share2, Download } from 'lucide-react';
 
 export default function App() {
   // Main data state
@@ -44,15 +46,72 @@ export default function App() {
 
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
   const [isDataModalOpen, setIsDataModalOpen] = useState(false);
+  const [isSaveShareModalOpen, setIsSaveShareModalOpen] = useState(false);
 
   const [detailProblem, setDetailProblem] = useState<ProblemItem | null>(null);
   const [deleteTargetIds, setDeleteTargetIds] = useState<string[]>([]);
+  const [sharedDataCandidate, setSharedDataCandidate] = useState<ProblemItem[] | null>(null);
 
-  // Load from local storage on mount
+  const [activeRoomId, setActiveRoomId] = useState<string>(() => {
+    return localStorage.getItem("KAIZEN_ACTIVE_ROOM_ID") || "TIM-OPERASIONAL";
+  });
+  const [isSavingCloud, setIsSavingCloud] = useState(false);
+  const [lastCloudSync, setLastCloudSync] = useState<string | null>(null);
+  const [isAutoSyncEnabled, setIsAutoSyncEnabled] = useState<boolean>(() => {
+    return localStorage.getItem("KAIZEN_AUTO_SYNC") === "true";
+  });
+
+  // Load from local storage on mount and check URL for shared room / data
   useEffect(() => {
     const loaded = loadProblemsFromStorage();
     setProblems(loaded);
     setIsLoaded(true);
+
+    let roomToLoad = activeRoomId;
+
+    // Check for shared_data or room in URL (hash or query)
+    try {
+      const hashOrSearch = window.location.hash || window.location.search;
+      if (hashOrSearch) {
+        const params = new URLSearchParams(hashOrSearch.replace(/^#/, '?'));
+        
+        // Check Room ID first (Live Cloud Sync)
+        const r = params.get('room');
+        if (r && r.trim()) {
+          roomToLoad = r.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '-');
+          setActiveRoomId(roomToLoad);
+          localStorage.setItem("KAIZEN_ACTIVE_ROOM_ID", roomToLoad);
+        }
+
+        // Check offline snapshot shared_data
+        const sharedStr = params.get('shared_data') || params.get('data');
+        if (sharedStr) {
+          const decoded = JSON.parse(decodeURIComponent(escape(atob(sharedStr))));
+          if (Array.isArray(decoded) && decoded.length > 0 && decoded[0].id && decoded[0].problem) {
+            setSharedDataCandidate(decoded);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Gagal membaca data dari Link Share:', e);
+    }
+
+    // Fetch live room data from server
+    if (roomToLoad) {
+      fetch(`/api/rooms/${roomToLoad}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data && data.success && data.roomData && Array.isArray(data.roomData.problems)) {
+            setProblems(data.roomData.problems);
+            saveProblemsToStorage(data.roomData.problems);
+            const timeStr = new Date(data.roomData.updatedAt || Date.now()).toLocaleTimeString("id-ID", { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            setLastCloudSync(timeStr);
+          }
+        })
+        .catch(err => {
+          console.warn("Could not fetch cloud room data:", err);
+        });
+    }
   }, []);
 
   // Save to local storage whenever problems change
@@ -61,6 +120,55 @@ export default function App() {
       saveProblemsToStorage(problems);
     }
   }, [problems, isLoaded]);
+
+  const handleSaveToCloud = async (customRoomId?: string): Promise<{ success: boolean; roomId?: string; error?: string }> => {
+    const targetRoom = (customRoomId || activeRoomId || "TIM-OPERASIONAL").trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '-');
+    setIsSavingCloud(true);
+    try {
+      const res = await fetch("/api/rooms/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          roomId: targetRoom,
+          problems,
+          lastUpdatedBy: "PIC User"
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setActiveRoomId(targetRoom);
+        localStorage.setItem("KAIZEN_ACTIVE_ROOM_ID", targetRoom);
+        const timeStr = new Date().toLocaleTimeString("id-ID", { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        setLastCloudSync(timeStr);
+        return { success: true, roomId: targetRoom };
+      } else {
+        throw new Error(data.error || "Gagal menyimpan ke server");
+      }
+    } catch (err: any) {
+      console.error("Cloud save error:", err);
+      return { success: false, error: err.message || "Network error" };
+    } finally {
+      setIsSavingCloud(false);
+    }
+  };
+
+  const handleToggleAutoSync = (enabled: boolean) => {
+    setIsAutoSyncEnabled(enabled);
+    localStorage.setItem("KAIZEN_AUTO_SYNC", enabled ? "true" : "false");
+    if (enabled) {
+      handleSaveToCloud();
+    }
+  };
+
+  // Debounced auto-save when problems change if auto-sync is enabled
+  useEffect(() => {
+    if (isAutoSyncEnabled && activeRoomId && problems.length > 0 && isLoaded) {
+      const timer = setTimeout(() => {
+        handleSaveToCloud(activeRoomId);
+      }, 1200);
+      return () => clearTimeout(timer);
+    }
+  }, [problems, isAutoSyncEnabled, activeRoomId, isLoaded]);
 
   // Filter and sort problems
   const filteredProblems = useMemo(() => {
@@ -264,6 +372,24 @@ export default function App() {
     setDetailProblem(null);
   };
 
+  const handleAcceptSharedData = () => {
+    if (!sharedDataCandidate) return;
+    setProblems(sharedDataCandidate);
+    saveProblemsToStorage(sharedDataCandidate);
+    setSharedDataCandidate(null);
+    try {
+      window.history.replaceState(null, '', window.location.pathname);
+    } catch (e) {}
+    alert(`🎉 Berhasil memuat dan menyimpan ${sharedDataCandidate.length} problem dari Link Share!`);
+  };
+
+  const handleIgnoreSharedData = () => {
+    setSharedDataCandidate(null);
+    try {
+      window.history.replaceState(null, '', window.location.pathname);
+    } catch (e) {}
+  };
+
   const handleAddNote = (id: string, noteText: string) => {
     const nowStr = getNowFormatted();
     setProblems((prev) =>
@@ -344,6 +470,45 @@ export default function App() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-indigo-50/60 via-[#f8fafc] to-[#f8fafc] text-slate-800 font-sans flex flex-col selection:bg-indigo-500 selection:text-white p-3 sm:p-6 lg:p-8 gap-6 max-w-[1600px] mx-auto w-full">
       
+      {/* Shared Data Import Banner */}
+      {sharedDataCandidate && (
+        <div className="bg-gradient-to-r from-indigo-900 via-purple-900 to-indigo-900 text-white p-4 sm:p-5 rounded-3xl shadow-xl border-2 border-indigo-400/50 flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in slide-in-from-top-4 duration-300">
+          <div className="flex items-center gap-3.5">
+            <div className="p-3 bg-amber-400/20 rounded-2xl border border-amber-400/40 shrink-0">
+              <Share2 className="w-6 h-6 text-amber-300 animate-pulse" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-extrabold text-base sm:text-lg text-white">
+                  Mendeteksi Data dari Link Share! 🚀
+                </h3>
+                <span className="px-2.5 py-0.5 rounded-full bg-amber-400 text-slate-950 font-black text-[11px] uppercase">
+                  {sharedDataCandidate.length} Problem
+                </span>
+              </div>
+              <p className="text-xs sm:text-sm text-indigo-100 mt-0.5 max-w-2xl">
+                Anda membuka tautan yang berisi data problem dari pengguna lain. Apakah Anda ingin mengimpor dan menyimpan data ini ke dalam tracker Anda?
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2.5 shrink-0 w-full sm:w-auto justify-end">
+            <button
+              onClick={handleIgnoreSharedData}
+              className="px-4 py-2 text-xs font-bold bg-white/10 hover:bg-white/20 text-indigo-200 hover:text-white rounded-xl border border-white/15 transition-all cursor-pointer"
+            >
+              Tolak / Abaikan
+            </button>
+            <button
+              onClick={handleAcceptSharedData}
+              className="px-5 py-2.5 text-xs font-extrabold bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 text-slate-950 rounded-xl shadow-lg shadow-amber-400/25 transition-all flex items-center gap-2 cursor-pointer active:scale-95"
+            >
+              <Download className="w-4 h-4" />
+              <span>Simpan & Muat Data ({sharedDataCandidate.length})</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header Banner */}
       <Header
         onOpenAddModal={() => {
@@ -352,10 +517,15 @@ export default function App() {
         }}
         onOpenAiModal={() => setIsAiModalOpen(true)}
         onOpenDataModal={() => setIsDataModalOpen(true)}
+        onOpenSaveShareModal={() => setIsSaveShareModalOpen(true)}
         totalCount={stats.total}
         openCount={stats.open}
         onProgressCount={stats.onProgress}
         closeCount={stats.close}
+        activeRoomId={activeRoomId}
+        onSaveToCloud={() => handleSaveToCloud()}
+        isSavingCloud={isSavingCloud}
+        lastCloudSync={lastCloudSync}
       />
 
       {/* Main Content Area */}
@@ -461,6 +631,19 @@ export default function App() {
         onConfirm={handleConfirmDelete}
         itemCount={deleteTargetIds.length}
         title={deleteTargetIds.length > 1 ? `Hapus ${deleteTargetIds.length} Problem Terpilih` : 'Hapus Problem Ini'}
+      />
+
+      {/* 6. Simpan & Share Modal */}
+      <SaveShareModal
+        isOpen={isSaveShareModalOpen}
+        onClose={() => setIsSaveShareModalOpen(false)}
+        problems={problems}
+        activeRoomId={activeRoomId}
+        onSaveToCloud={handleSaveToCloud}
+        isSavingCloud={isSavingCloud}
+        lastCloudSync={lastCloudSync}
+        isAutoSyncEnabled={isAutoSyncEnabled}
+        onToggleAutoSync={handleToggleAutoSync}
       />
 
     </div>

@@ -1,16 +1,55 @@
 import express from "express";
 import path from "path";
+import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 
 dotenv.config();
 
+// In-memory cache & persistence for Shared Cloud Rooms (Live Auto-Update)
+const roomsCache = new Map<string, { roomId: string; problems: any[]; updatedAt: string; lastUpdatedBy?: string }>();
+const DATA_DIR = path.join(process.cwd(), "data");
+const ROOMS_FILE = path.join(DATA_DIR, "rooms_backup.json");
+
+// Load initial rooms from file if exists
+try {
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+  if (fs.existsSync(ROOMS_FILE)) {
+    const raw = fs.readFileSync(ROOMS_FILE, "utf-8");
+    const parsed = JSON.parse(raw);
+    if (typeof parsed === "object" && parsed !== null) {
+      Object.entries(parsed).forEach(([key, val]: [string, any]) => {
+        roomsCache.set(key, val);
+      });
+    }
+  }
+} catch (e) {
+  console.warn("Could not load rooms from file, using in-memory only:", e);
+}
+
+function saveRoomsToFile() {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    const obj: Record<string, any> = {};
+    roomsCache.forEach((val, key) => {
+      obj[key] = val;
+    });
+    fs.writeFileSync(ROOMS_FILE, JSON.stringify(obj, null, 2), "utf-8");
+  } catch (e) {
+    console.warn("Failed to write rooms backup to disk:", e);
+  }
+}
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(express.json());
+  app.use(express.json({ limit: "10mb" }));
 
   // API endpoint for AI Root Cause & Corrective Action Assistant
   app.post("/api/analyze-problem", async (req, res) => {
@@ -75,6 +114,63 @@ Berikan respons DALAM FORMAT JSON SAJA (tanpa markdown backtick atau teks lain d
           correctiveAction: "Lakukan briefing harian dan tetapkan action plan terukur dengan PIC."
         }
       });
+    }
+  });
+
+  // API Endpoint: Save / Update Shared Room Data (Live Cloud Sync)
+  app.post("/api/rooms/save", (req, res) => {
+    try {
+      const { roomId, problems, lastUpdatedBy } = req.body;
+      if (!roomId || typeof roomId !== "string") {
+        return res.status(400).json({ error: "Room ID wajib diisi" });
+      }
+      if (!Array.isArray(problems)) {
+        return res.status(400).json({ error: "Data problems tidak valid" });
+      }
+
+      const cleanRoomId = roomId.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, "-") || "DEFAULT-ROOM";
+      const roomData = {
+        roomId: cleanRoomId,
+        problems,
+        updatedAt: new Date().toISOString(),
+        lastUpdatedBy: lastUpdatedBy || "PIC User",
+      };
+
+      roomsCache.set(cleanRoomId, roomData);
+      saveRoomsToFile();
+
+      return res.json({
+        success: true,
+        message: `Berhasil menyimpan ${problems.length} problem ke Ruangan Cloud [${cleanRoomId}]`,
+        roomData,
+      });
+    } catch (err: any) {
+      console.error("Save Room Error:", err);
+      return res.status(500).json({ error: "Gagal menyimpan data ke server." });
+    }
+  });
+
+  // API Endpoint: Load Shared Room Data (Live Cloud Sync)
+  app.get("/api/rooms/:roomId", (req, res) => {
+    try {
+      const { roomId } = req.params;
+      const cleanRoomId = roomId.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, "-") || "DEFAULT-ROOM";
+      
+      const roomData = roomsCache.get(cleanRoomId);
+      if (!roomData) {
+        return res.status(404).json({
+          success: false,
+          error: `Ruangan '${cleanRoomId}' belum memiliki data tersimpan.`,
+        });
+      }
+
+      return res.json({
+        success: true,
+        roomData,
+      });
+    } catch (err: any) {
+      console.error("Load Room Error:", err);
+      return res.status(500).json({ error: "Gagal memuat data dari server." });
     }
   });
 
