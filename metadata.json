@@ -1,0 +1,6 @@
+{
+  "name": "Daily Problem & CAPA Tracker",
+  "description": "Aplikasi web pelacakan Problem, Identifikasi, dan Corrective Action harian dengan status real-time (Open, On Progress, Close) serta asisten AI root-cause.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
