@@ -10,12 +10,10 @@ interface FilterBarProps {
 
 const CATEGORIES: ('all' | TaskCategory)[] = [
   'all',
-  'Operasional',
-  'Mesin & Peralatan',
-  'Kualitas (Quality)',
-  'K3 & Safety',
-  'IT & Sistem',
-  'Umum & Pribadi',
+  'Keluarga',
+  'operasional putih telur',
+  'kualitas putih telur',
+  'sistem',
 ];
 
 const PRIORITIES: ('all' | TaskPriority)[] = ['all', 'Tinggi', 'Sedang', 'Rendah'];

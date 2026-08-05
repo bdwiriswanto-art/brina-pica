@@ -1,12 +1,10 @@
 export type TaskStatus = 'open' | 'on_progress' | 'close';
 
 export type TaskCategory = 
-  | 'Operasional' 
-  | 'Mesin & Peralatan' 
-  | 'Kualitas (Quality)' 
-  | 'K3 & Safety' 
-  | 'IT & Sistem' 
-  | 'Umum & Pribadi';
+  | 'Keluarga'
+  | 'operasional putih telur'
+  | 'kualitas putih telur'
+  | 'sistem';
 
 export type TaskPriority = 'Tinggi' | 'Sedang' | 'Rendah';
 

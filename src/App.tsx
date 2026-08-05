@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   ProblemItem, 
   TaskStatus, 
@@ -57,9 +57,13 @@ export default function App() {
   });
   const [isSavingCloud, setIsSavingCloud] = useState(false);
   const [lastCloudSync, setLastCloudSync] = useState<string | null>(null);
+  const [isCloudInitialized, setIsCloudInitialized] = useState(false);
   const [isAutoSyncEnabled, setIsAutoSyncEnabled] = useState<boolean>(() => {
-    return localStorage.getItem("KAIZEN_AUTO_SYNC") === "true";
+    const saved = localStorage.getItem("KAIZEN_AUTO_SYNC");
+    return saved !== "false";
   });
+
+  const skipNextCloudSaveRef = useRef(false);
 
   // Load from local storage on mount and check URL for shared room / data
   useEffect(() => {
@@ -102,6 +106,7 @@ export default function App() {
         .then(res => res.json())
         .then(data => {
           if (data && data.success && data.roomData && Array.isArray(data.roomData.problems)) {
+            skipNextCloudSaveRef.current = true;
             setProblems(data.roomData.problems);
             saveProblemsToStorage(data.roomData.problems);
             const timeStr = new Date(data.roomData.updatedAt || Date.now()).toLocaleTimeString("id-ID", { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -110,7 +115,12 @@ export default function App() {
         })
         .catch(err => {
           console.warn("Could not fetch cloud room data:", err);
+        })
+        .finally(() => {
+          setIsCloudInitialized(true);
         });
+    } else {
+      setIsCloudInitialized(true);
     }
   }, []);
 
@@ -160,15 +170,46 @@ export default function App() {
     }
   };
 
+  // Subscribe to live cloud updates via SSE
+  useEffect(() => {
+    if (!activeRoomId || !isAutoSyncEnabled) return;
+
+    const eventSource = new EventSource(`/api/rooms/${activeRoomId}/events`);
+    
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data && data.problems && Array.isArray(data.problems)) {
+          // Tell the auto-saver to ignore this update
+          skipNextCloudSaveRef.current = true;
+          setProblems(data.problems);
+          saveProblemsToStorage(data.problems);
+          const timeStr = new Date(data.updatedAt || Date.now()).toLocaleTimeString("id-ID", { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+          setLastCloudSync(timeStr);
+        }
+      } catch (e) {
+        console.error("Gagal membaca pembaruan live data", e);
+      }
+    };
+    
+    return () => {
+      eventSource.close();
+    };
+  }, [activeRoomId, isAutoSyncEnabled]);
+
   // Debounced auto-save when problems change if auto-sync is enabled
   useEffect(() => {
-    if (isAutoSyncEnabled && activeRoomId && problems.length > 0 && isLoaded) {
+    if (isAutoSyncEnabled && activeRoomId && isLoaded && isCloudInitialized) {
+      if (skipNextCloudSaveRef.current) {
+        skipNextCloudSaveRef.current = false;
+        return;
+      }
       const timer = setTimeout(() => {
         handleSaveToCloud(activeRoomId);
       }, 1200);
       return () => clearTimeout(timer);
     }
-  }, [problems, isAutoSyncEnabled, activeRoomId, isLoaded]);
+  }, [problems, isAutoSyncEnabled, activeRoomId, isLoaded, isCloudInitialized]);
 
   // Filter and sort problems
   const filteredProblems = useMemo(() => {

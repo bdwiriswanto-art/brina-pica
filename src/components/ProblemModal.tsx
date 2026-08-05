@@ -10,12 +10,10 @@ interface ProblemModalProps {
 }
 
 const CATEGORIES: TaskCategory[] = [
-  'Operasional',
-  'Mesin & Peralatan',
-  'Kualitas (Quality)',
-  'K3 & Safety',
-  'IT & Sistem',
-  'Umum & Pribadi',
+  'Keluarga',
+  'operasional putih telur',
+  'kualitas putih telur',
+  'sistem',
 ];
 
 const PRIORITIES: TaskPriority[] = ['Tinggi', 'Sedang', 'Rendah'];
@@ -29,7 +27,7 @@ export const ProblemModal: React.FC<ProblemModalProps> = ({
   const [problem, setProblem] = useState('');
   const [identifikasi, setIdentifikasi] = useState('');
   const [correctiveAction, setCorrectiveAction] = useState('');
-  const [category, setCategory] = useState<TaskCategory>('Operasional');
+  const [category, setCategory] = useState<TaskCategory>('Keluarga');
   const [priority, setPriority] = useState<TaskPriority>('Sedang');
   const [status, setStatus] = useState<TaskStatus>('open');
   const [pic, setPic] = useState('');
@@ -45,7 +43,7 @@ export const ProblemModal: React.FC<ProblemModalProps> = ({
       setProblem(initialData.problem || '');
       setIdentifikasi(initialData.identifikasi || '');
       setCorrectiveAction(initialData.correctiveAction || '');
-      setCategory(initialData.category || 'Operasional');
+      setCategory(initialData.category || 'Keluarga');
       setPriority(initialData.priority || 'Sedang');
       setStatus(initialData.status || 'open');
       setPic(initialData.pic || '');
@@ -56,7 +54,7 @@ export const ProblemModal: React.FC<ProblemModalProps> = ({
       setProblem('');
       setIdentifikasi('');
       setCorrectiveAction('');
-      setCategory('Operasional');
+      setCategory('Keluarga');
       setPriority('Sedang');
       setStatus('open');
       setPic('');

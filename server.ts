@@ -45,11 +45,34 @@ function saveRoomsToFile() {
   }
 }
 
+// Global Map to store SSE clients per room
+const sseClients = new Map<string, express.Response[]>();
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
   app.use(express.json({ limit: "10mb" }));
+
+  // SSE Endpoint: Listen for live updates
+  app.get("/api/rooms/:roomId/events", (req, res) => {
+    const { roomId } = req.params;
+    const cleanRoomId = roomId.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, "-") || "DEFAULT-ROOM";
+
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+
+    if (!sseClients.has(cleanRoomId)) {
+      sseClients.set(cleanRoomId, []);
+    }
+    sseClients.get(cleanRoomId)!.push(res);
+
+    req.on("close", () => {
+      const clients = sseClients.get(cleanRoomId) || [];
+      sseClients.set(cleanRoomId, clients.filter(c => c !== res));
+    });
+  });
 
   // API endpoint for AI Root Cause & Corrective Action Assistant
   app.post("/api/analyze-problem", async (req, res) => {
@@ -138,6 +161,14 @@ Berikan respons DALAM FORMAT JSON SAJA (tanpa markdown backtick atau teks lain d
 
       roomsCache.set(cleanRoomId, roomData);
       saveRoomsToFile();
+
+      // Broadcast to SSE clients
+      const clients = sseClients.get(cleanRoomId);
+      if (clients) {
+        clients.forEach(client => {
+          client.write(`data: ${JSON.stringify(roomData)}\n\n`);
+        });
+      }
 
       return res.json({
         success: true,

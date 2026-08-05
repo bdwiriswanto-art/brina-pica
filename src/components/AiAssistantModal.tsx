@@ -9,12 +9,10 @@ interface AiAssistantModalProps {
 }
 
 const CATEGORIES: TaskCategory[] = [
-  'Operasional',
-  'Mesin & Peralatan',
-  'Kualitas (Quality)',
-  'K3 & Safety',
-  'IT & Sistem',
-  'Umum & Pribadi',
+  'Keluarga',
+  'operasional putih telur',
+  'kualitas putih telur',
+  'sistem',
 ];
 
 export const AiAssistantModal: React.FC<AiAssistantModalProps> = ({
@@ -23,7 +21,7 @@ export const AiAssistantModal: React.FC<AiAssistantModalProps> = ({
   onSaveDirectToTable,
 }) => {
   const [problemText, setProblemText] = useState('');
-  const [category, setCategory] = useState<TaskCategory>('Operasional');
+  const [category, setCategory] = useState<TaskCategory>('Keluarga');
   const [priority, setPriority] = useState<TaskPriority>('Sedang');
   const [pic, setPic] = useState('Tim Terkait');
 
